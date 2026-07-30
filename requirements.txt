@@ -1,0 +1,37 @@
+# Core
+numpy
+pandas
+scipy
+pyarrow
+
+# Technical Indicators
+ta
+
+# Visualization
+matplotlib
+plotly
+
+# Machine Learning (future)
+scikit-learn
+
+# Configuration
+pyyaml
+python-dotenv
+
+# Utilities
+tqdm
+loguru
+
+# Jupyter
+jupyter
+ipykernel
+
+# Testing
+pytest
+pytest-cov
+
+# Code Quality
+black
+ruff
+mypy
+pre-commit
