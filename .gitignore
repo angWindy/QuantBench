@@ -220,3 +220,15 @@ __marimo__/
 # Big Data
 # Folder Data
 data/
+
+# Env / secrets
+.env
+
+# Runtime artefacts
+logs/
+reports/
+*.log
+
+# Notebook checkpoints (extra safety)
+.ipynb_checkpoints/
+.DS_Store

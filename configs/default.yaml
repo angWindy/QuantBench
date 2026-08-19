@@ -1,0 +1,34 @@
+# QuantBench — Default pipeline configuration
+# Copy to configs/local.yaml and edit per strategy / data universe.
+
+project:
+  name: QuantBench
+  symbol: NQ
+  timeframe: 1min
+  data:
+    raw_glob: "data/raw/Dataset_{symbol}_{timeframe}_*.csv"
+    processed_path: "data/processed/{symbol}_{timeframe}.parquet"
+    timezone: "America/New_York"   # convert to UTC before storing
+
+backtest:
+  initial_capital: 100000
+  fee_bps: 2.5
+  slippage_bps: 1.0
+  execution_lag_bars: 1
+  position_sizing: fixed_fractional
+  position_size: 1.0              # fraction of equity per signal
+
+strategy:
+  name: random                     # random | ma_crossover | rsi | ml_lgbm
+  params: {}
+
+validation:
+  method: walk_forward             # walk_forward | purged_kfold
+  n_splits: 5
+  embargo_bars: 10
+  out_of_sample_fraction: 0.2
+
+reporting:
+  output_dir: reports
+  formats: [html, png]
+  metrics: [sharpe, sortino, max_drawdown, calmar, win_rate, profit_factor]
