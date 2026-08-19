@@ -36,11 +36,16 @@ from quantbench.metrics.performance import (  # noqa: E402
     compute_metrics_from_returns,
 )
 from quantbench.simulator import PaperTrader  # noqa: E402
-from quantbench.strategies import MACrossStrategy, RandomStrategy  # noqa: E402
+from quantbench.strategies import (  # noqa: E402
+    MACrossStrategy,
+    RandomStrategy,
+    VWAPMeanReversionScalper,
+)
 
 _STRATEGIES = {
     "random": RandomStrategy,
     "ma_cross": MACrossStrategy,
+    "vwap_reversion": VWAPMeanReversionScalper,
 }
 
 
@@ -97,6 +102,7 @@ def run_session(
             "position_size": bt_config.position_size,
         },
         "metrics": metrics.as_dict(),
+        "side_breakdown": _side_breakdown(result.fills),
         "data_summary": {
             "start": str(df.index[0]),
             "end": str(df.index[-1]),
@@ -115,8 +121,19 @@ def run_session(
     trades_csv = path.with_suffix(".trades.csv")
     result.equity_curve.to_frame("equity").to_csv(equity_csv)
     result.trades.to_csv(trades_csv, index=False)
-    logger.info(f"  wrote {equity_csv.name}, {trades_csv.name}")
+    fills_csv = path.with_suffix(".fills.csv")
+    result.fills.to_csv(fills_csv, index=False)
+    logger.info(f"  wrote {equity_csv.name}, {trades_csv.name}, {fills_csv.name}")
     return path
+
+
+def _side_breakdown(fills: pd.DataFrame) -> dict:
+    """Summarise fills by side. PaperTrader currently only emits buy/sell
+    (long-only), but we count both so the dashboard shows the truth."""
+    if fills.empty:
+        return {"buy": 0, "sell": 0}
+    counts = fills["side"].value_counts().to_dict()
+    return {"buy": int(counts.get("buy", 0)), "sell": int(counts.get("sell", 0))}
 
 
 def _metrics_from_equity(
@@ -137,7 +154,8 @@ def _metrics_from_equity(
 def main() -> int:
     p = argparse.ArgumentParser(description="Run a paper trading session")
     p.add_argument("--data", required=True, type=Path)
-    p.add_argument("--strategy", default="random", choices=["random", "ma_cross"])
+    p.add_argument("--strategy", default="random",
+                   choices=["random", "ma_cross", "vwap_reversion"])
     p.add_argument("--params", default="{}", type=str)
     p.add_argument("--name", required=True, type=str)
     p.add_argument("--bars", type=int, default=20_000,

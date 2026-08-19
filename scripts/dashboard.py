@@ -262,6 +262,13 @@ def main() -> None:
     section_overview(session)
     section_curves(session)
 
+    # Side breakdown (buy vs sell fills) — useful for long/short-aware strategies.
+    breakdown = session.get("side_breakdown")
+    if breakdown:
+        bc1, bc2 = st.columns(2)
+        bc1.metric("Buy fills (open long)", breakdown.get("buy", 0))
+        bc2.metric("Sell fills (close long)", breakdown.get("sell", 0))
+
     if compare_names:
         st.markdown("---")
         st.subheader("Comparison")
