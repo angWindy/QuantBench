@@ -49,5 +49,5 @@ ruff>=0.5
 mypy>=1.10
 pre-commit>=3.7
 
-# --- Experiment tracking (optional) -----------------------------------------
-# mlflow>=2.14      # uncomment when needed
+# --- Dashboard -------------------------------------------------------------
+streamlit>=1.36

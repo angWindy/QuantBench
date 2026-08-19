@@ -43,9 +43,39 @@ QuantBench/
 ```
 [Data Ingestion] → [Storage (Parquet)] → [Feature Engineering]
        → [Strategy / Model] → [Backtest Engine] → [Report]
+                       ↓
+            [Paper Trader (bar-by-bar)] → [Session JSON/CSV]
+                       ↓
+                 [Streamlit Dashboard]
 ```
 
 Each stage writes to disk so any stage can be swapped independently.
+
+## Quickstart
+
+```bash
+# 1. activate env
+conda activate quant
+
+# 2. (optional) regenerate processed data
+python scripts/prepare_data.py \
+  --raw data/raw/Dataset_NQ_1min_2022_2025.csv \
+  --out data/processed/NQ_1min.parquet
+
+# 3. run a paper trading session
+python scripts/run_paper_session.py \
+  --data data/processed/NQ_1min.parquet \
+  --strategy random \
+  --params '{"seed": 42, "p_enter": 0.01, "p_exit": 0.02}' \
+  --name paper_random_42 \
+  --bars 20000
+
+# 4. open the dashboard
+streamlit run scripts/dashboard.py
+```
+
+Sessions are written to `reports/sessions/*.json` (+ sidecar `.equity.csv`
+and `.trades.csv`); the dashboard picks them up automatically.
 
 ## Backtest realism checklist
 
