@@ -112,15 +112,22 @@ def compute_metrics_from_returns(
     max_dd = _max_drawdown(equity)
     calmar = float(cagr / abs(max_dd)) if max_dd != 0 else 0.0
 
-    if trades is not None and "pnl" in trades.columns and len(trades) > 0:
-        pnls = trades["pnl"].astype(float)
-        wins = pnls[pnls > 0]
-        losses = pnls[pnls < 0]
-        n_trades = int(len(pnls))
-        win_rate = float(len(wins) / n_trades) if n_trades else 0.0
-        gross_win = wins.sum()
-        gross_loss = abs(losses.sum())
-        profit_factor = float(gross_win / gross_loss) if gross_loss > 0 else np.inf
+    if trades is not None and len(trades) > 0:
+        # vectorbt uses capitalised column names ("PnL"); accept any case.
+        pnl_col = next((c for c in trades.columns if c.lower() == "pnl"), None)
+        if pnl_col is None:
+            n_trades = 0
+            win_rate = 0.0
+            profit_factor = 0.0
+        else:
+            pnls = trades[pnl_col].astype(float)
+            wins = pnls[pnls > 0]
+            losses = pnls[pnls < 0]
+            n_trades = int(len(pnls))
+            win_rate = float(len(wins) / n_trades) if n_trades else 0.0
+            gross_win = wins.sum()
+            gross_loss = abs(losses.sum())
+            profit_factor = float(gross_win / gross_loss) if gross_loss > 0 else np.inf
     else:
         n_trades = 0
         win_rate = 0.0
