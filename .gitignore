@@ -218,15 +218,30 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Big Data
-# Folder Data
-data/
+# Ignore the raw/processed data files (large) but track folder structure
+/data/raw/**
+/data/processed/**
+/data/external/*
+
+# Override: keep .gitkeep placeholders so empty folders survive git
+!/data/raw/.gitkeep
+!/data/processed/.gitkeep
+!/data/external/.gitkeep
 
 # Env / secrets
 .env
 
 # Runtime artefacts
-logs/
-reports/
+logs/*
+!logs/.gitkeep
+# Reports: ignore loose files at the top of reports/ (data dumps, etc.) but
+# keep .gitkeep and any *.md summary files. Subdirectories like
+# reports/sessions/ are matched separately below.
+reports/*
+!reports/.gitkeep
+!reports/*.md
+reports/sessions/**
+!reports/sessions/.gitkeep
 *.log
 
 # Notebook checkpoints (extra safety)

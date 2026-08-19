@@ -102,6 +102,22 @@ class PaperTrader:
         """Reset all internal state. Useful for repeated runs in a dashboard."""
         self._reset_state()
 
+    def feed(self, df: pd.DataFrame) -> None:
+        """Pre-load a DataFrame so step() can append without rebuilding.
+
+        The strategy requires a DataFrame view, so instead of copying the
+        growing list into a DataFrame on every bar (O(n^2) over a session),
+        we prep an empty DataFrame and ``.loc``-append rows in O(1) amortised.
+        """
+        required = [c for c in ("open", "high", "low", "close", "volume") if c in df.columns]
+        if "close" not in df.columns:
+            raise ValueError("df must contain a 'close' column")
+        if not isinstance(df.index, pd.DatetimeIndex):
+            raise ValueError("df must have a DatetimeIndex")
+        cols = ["close"] + [c for c in ("open", "high", "low", "volume") if c in df.columns]
+        self._df = df[cols].copy()
+        self._df_seen = 0
+
     def step(self, bar: pd.Series) -> SimState | None:
         """Advance the simulator by one bar.
 
@@ -121,24 +137,33 @@ class PaperTrader:
         if not isinstance(ts, pd.Timestamp):
             raise ValueError("bar must be a Series with a DatetimeIndex name")
 
-        self._bars.append(bar)
+        # Append to the pre-loaded DataFrame in O(1) instead of rebuilding
+        # from a growing list of Series (which would be O(n^2) over a session).
+        if self._df is not None:
+            self._df_seen += 1
+        else:
+            self._bars.append(bar)
 
         # Need at least execution_lag_bars + 1 bars so the strategy can look
         # at least one bar in the past before deciding the next action.
-        ready = len(self._bars) >= max(self.config.execution_lag_bars + 1, 2)
+        n_seen = self._df_seen if self._df is not None else len(self._bars)
+        ready = n_seen >= max(self.config.execution_lag_bars + 1, 2)
 
         # 1) Execute any pending order queued at a previous bar.
         pending = self._pending
         self._pending = None
-        if pending is not None and len(self._bars) > self.config.execution_lag_bars:
+        if pending is not None and n_seen > self.config.execution_lag_bars:
             fill = self._execute(pending, ts, bar["open"])
             if fill is not None:
                 self._record_fill(fill, ts)
 
         # 2) Let the strategy look at the *past* bars to decide a new action.
         if ready:
-            window = pd.DataFrame(self._bars)
-            window.index = pd.DatetimeIndex([b.name for b in self._bars])
+            if self._df is not None:
+                window = self._df.iloc[: self._df_seen]
+            else:
+                window = pd.DataFrame(self._bars)
+                window.index = pd.DatetimeIndex([b.name for b in self._bars])
             signals = self.strategy.generate_signals(window)
             # The signal at the most-recent decided bar is the one we act on.
             # We queue the action; it will fill `execution_lag_bars` bars later.
@@ -177,6 +202,7 @@ class PaperTrader:
         self.reset()
         if "close" not in df.columns:
             raise ValueError("df must contain a 'close' column")
+        self.feed(df)
         for ts, bar in df.iterrows():
             self.step(bar)
         return self.result()
@@ -201,7 +227,7 @@ class PaperTrader:
             position_curve=pos,
             cash_curve=cash,
             fills=fills_df,
-            n_bars=len(self._bars),
+            n_bars=self._df_seen if self._df is not None else len(self._bars),
             n_fills=len(self._fills),
             final_equity=float(eq.iloc[-1]) if len(eq) else float(self.config.initial_capital),
         )
@@ -210,6 +236,8 @@ class PaperTrader:
 
     def _reset_state(self) -> None:
         self._bars: list[pd.Series] = []
+        self._df: pd.DataFrame | None = None
+        self._df_seen: int = 0
         self._position = Position()
         self._cash: float = float(self.config.initial_capital)
         self._pending: str | None = None
@@ -234,9 +262,13 @@ class PaperTrader:
         slip = self.config.slippage_bps / 10_000
         if side == "buy":
             fill_price = fill_price_ref * (1 + slip)
-            size = target_notional / fill_price
-            fee = abs(size) * fill_price * (self.config.fee_bps / 10_000)
-            if self.config.initial_capital > 0 and (self._cash - size * fill_price - fee) < -1e-9:
+            fee_rate = self.config.fee_bps / 10_000
+            # Solve for size S such that S*fill_price + S*fill_price*fee_rate = target_notional
+            # => S = target_notional / (fill_price * (1 + fee_rate))
+            size = target_notional / (fill_price * (1 + fee_rate))
+            fee = abs(size) * fill_price * fee_rate
+            cost = size * fill_price + fee
+            if self._cash < cost - 1e-9:
                 # Not enough cash for a full target notional — skip this fill.
                 return None
             self._position = Position(
@@ -245,19 +277,23 @@ class PaperTrader:
                 entry_time=ts,
                 entry_fee_paid=fee,
             )
-            self._cash -= size * fill_price + fee
+            self._cash -= cost
+            return Fill(time=ts, side="buy", size=size, price=fill_price,
+                        fee=fee, notional=size * fill_price)
         elif side == "sell":
             fill_price = fill_price_ref * (1 - slip)
             size = self._position.size  # close entire long
             proceeds = size * fill_price
             fee = abs(proceeds) * (self.config.fee_bps / 10_000)
-            pnl = (fill_price - self._position.entry_price) * size
             self._cash += proceeds - fee
             self._position = Position()
             return Fill(time=ts, side="sell", size=size, price=fill_price,
                         fee=fee, notional=proceeds)
         else:
             return None
+
+        # Unreachable — both branches return above.
+        return None  # pragma: no cover
 
         return Fill(time=ts, side="buy", size=size, price=fill_price,
                     fee=fee, notional=size * fill_price)

@@ -50,12 +50,17 @@ class RandomStrategy:
         self.p_enter = p_enter
         self.p_exit = p_exit
         self.seed = seed
+        self._rng = np.random.default_rng(seed)
 
     def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        rng = np.random.default_rng(self.seed)
         n = len(df)
-        entries = rng.random(n) < self.p_enter
-        exits = rng.random(n) < self.p_exit
+        # Use a stateful RNG so that calling generate_signals with a growing
+        # window (as the simulator does bar-by-bar) keeps the same sequence
+        # as a one-shot call on the full frame. Without this, the simulator
+        # would re-seed every step and produce different signals than the
+        # pre-computed reference.
+        entries = self._rng.random(n) < self.p_enter
+        exits = self._rng.random(n) < self.p_exit
         # No simultaneous enter+exit on the same bar.
         both = entries & exits
         if both.any():

@@ -96,6 +96,23 @@ def test_paper_trader_reset():
     assert trader._cash == 100_000.0
 
 
+def test_paper_trader_buy_records_fill_and_position():
+    """Regression: the 'buy' branch of _execute was returning None silently,
+    so the first entry of a long-only strategy never opened a position."""
+    df = _synth(n=2000)
+    trader = PaperTrader(
+        strategy=RandomStrategy(seed=8, p_enter=0.01, p_exit=0.02),
+        config=BacktestConfig(execution_lag_bars=1),
+    )
+    result = trader.run(df)
+    # With ~2000 bars at p_enter=0.01 we expect ~20 entries with high probability.
+    assert result.n_fills > 0, "Expected at least one fill on 2000 bars"
+    # Position should have been non-zero at some point.
+    assert (result.position_curve != 0).any()
+    # At least one buy fill must exist.
+    assert (result.fills["side"] == "buy").any()
+
+
 def test_bar_feed_iterates_rows():
     df = _synth(n=5)
     feed = BarFeed(df)
